@@ -1,1 +1,4 @@
-root: alanlt@gmail.com
+# /etc/aliases — managed by deploy/install.sh
+# Edit the line below to your real email, then run: sudo newaliases
+# While this line is commented out, system mail to "root" goes nowhere.
+#root: you@example.com

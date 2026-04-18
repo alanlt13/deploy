@@ -27,6 +27,11 @@ log()  { printf '\n\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[warn]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[fail]\033[0m %s\n' "$*" >&2; exit 1; }
 
+# Collected post-install commands shown in the final summary instead of
+# being warn()ed inline. Each entry is: "description|command".
+NEXT_STEPS=()
+add_next() { NEXT_STEPS+=("$1"); }
+
 # Fetch a file from the repo (used for etc/* assets when running via curl|bash).
 # If the script is executed from a local checkout, prefer the local copy.
 fetch_asset() {
@@ -148,12 +153,22 @@ done
 # Mail alias
 ########################################
 log "Installing /etc/aliases"
-fetch_asset "etc/aliases" /etc/aliases
-chmod 644 /etc/aliases
-newaliases
+ALIASES_MARKER="# /etc/aliases — managed by deploy/install.sh"
+if [[ -f /etc/aliases ]] && ! grep -qF "${ALIASES_MARKER}" /etc/aliases; then
+    echo "/etc/aliases exists without our marker — leaving it alone (you've edited it)"
+else
+    fetch_asset "etc/aliases" /etc/aliases
+    chmod 644 /etc/aliases
+    newaliases
+fi
+
+# The template ships with the root: line commented out. Flag it until edited.
+if grep -qE '^\s*#\s*root:' /etc/aliases; then
+    add_next "Set where system mail goes (uncomment + edit the root: line, then newaliases)|sudo \$EDITOR /etc/aliases && sudo newaliases"
+fi
+
 if [[ ! -f /etc/msmtprc ]]; then
-    warn "/etc/msmtprc is not configured — mail will not be delivered yet"
-    warn "see secrets.example/README.md for the post-install step"
+    add_next "Configure outbound mail|sudo \$EDITOR /etc/msmtprc   # template: secrets.example/msmtprc.example"
 fi
 
 ########################################
@@ -175,7 +190,7 @@ if [[ -n "${TAILSCALE_AUTHKEY}" ]]; then
         echo "tailscale: $(tailscale ip -4 | head -1)"
     fi
 else
-    warn "TAILSCALE_AUTHKEY not set — run 'sudo tailscale up --ssh' and follow the login URL to join the tailnet"
+    add_next "Join the tailnet (opens a login URL)|sudo tailscale up --ssh"
 fi
 
 ########################################
@@ -224,28 +239,61 @@ systemctl enable --now unattended-upgrades.service >/dev/null
 ########################################
 # Summary
 ########################################
+# Always-recommended next steps (not tied to a specific condition above).
+add_next "Set a password for ${USERNAME} (for provider console / emergency fallback; key auth still preferred)|sudo passwd ${USERNAME}"
+add_next "Run the user-level bootstrap as ${USERNAME} (after you ssh in)|bash <(curl -fsSL ${REPO_RAW_BASE}/user.sh)"
+if [[ -f /var/run/reboot-required ]]; then
+    add_next "Reboot (kernel or libc update from dist-upgrade requires it)|sudo reboot"
+fi
+
 log "Done"
 ts_status="not joined"
 if tailscale status >/dev/null 2>&1; then
-    ts_status="$(tailscale ip -4 2>/dev/null | head -1) ($(tailscale status --self --peers=false --json 2>/dev/null | awk -F\" '/"DNSName"/{print $4; exit}' | sed 's/\.$//'))"
+    ts_dns="$(tailscale status --self --peers=false --json 2>/dev/null | awk -F\" '/"DNSName"/{print $4; exit}' | sed 's/\.$//')"
+    ts_ip="$(tailscale ip -4 2>/dev/null | head -1)"
+    ts_status="${ts_ip}${ts_dns:+ (${ts_dns})}"
 fi
 cat <<EOF
 
+============================================================
 Bootstrap complete.
+============================================================
 
+Status
+------
   user:              ${USERNAME} (in sudo group)
   passwordless sudo: $([[ "${PASSWORDLESS_SUDO}" == "1" ]] && echo yes || echo no)
   authorized_keys:   $(wc -l < "${AUTH_KEYS}") key(s) at ${AUTH_KEYS}
   tailscale:         ${ts_status}
-  ssh password auth: $([[ "${HARDEN_SSH}" == "1" && -f /etc/ssh/sshd_config.d/50-hardening.conf ]] && echo disabled || echo "(image default)")
+  ssh password auth: $([[ -f /etc/ssh/sshd_config.d/50-hardening.conf ]] && echo disabled || echo "(image default)")
   mail alias:        $(awk -F: '/^root:/{print $2}' /etc/aliases | xargs || echo "(none)")
   unattended-upgr:   $(systemctl is-active unattended-upgrades.service)
 
-Next steps:
-  1. From your laptop: ssh ${USERNAME}@<host>  (verify key-auth works)
-     — or, if tailscale is up: ssh ${USERNAME}@<tailscale-name>
-  2. If tailscale says "not joined": sudo tailscale up --ssh   (then open the URL it prints)
-  3. Drop /etc/msmtprc on the box — see secrets.example/README.md
-  4. Optional: also disable root SSH login (secrets README has the drop-in)
+EOF
+
+if (( ${#NEXT_STEPS[@]} > 0 )); then
+    printf 'Next steps (run these now, as root here)\n'
+    printf -- '----------------------------------------\n'
+    for item in "${NEXT_STEPS[@]}"; do
+        desc="${item%%|*}"
+        cmd="${item#*|}"
+        printf '  # %s\n  %s\n\n' "${desc}" "${cmd}"
+    done
+fi
+
+cat <<EOF
+Then, from your laptop
+----------------------
+  ssh ${USERNAME}@<host-or-tailscale-name>
+
+Later (optional hardening)
+--------------------------
+  # Disable root SSH login — do this only AFTER you've confirmed the
+  # above ssh as ${USERNAME} works, and ideally that Tailscale SSH works
+  # too (see README.md → Lockout recovery).
+  sudo tee /etc/ssh/sshd_config.d/50-no-root.conf >/dev/null <<'CONF'
+PermitRootLogin no
+CONF
+  sudo sshd -t && sudo systemctl reload ssh
 
 EOF

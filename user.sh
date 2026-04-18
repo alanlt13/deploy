@@ -47,18 +47,6 @@ log "Checking environment"
 [[ "${ID:-}" == "ubuntu" ]] || die "this script targets Ubuntu only (found ID=${ID:-unknown})"
 
 ########################################
-# Git config
-########################################
-log "Installing ~/.gitconfig"
-GITCONFIG="${HOME}/.gitconfig"
-if [[ -f "${GITCONFIG}" ]]; then
-    echo "${GITCONFIG} already exists — leaving it alone"
-else
-    fetch_asset "dotfiles/gitconfig" "${GITCONFIG}"
-    chmod 644 "${GITCONFIG}"
-fi
-
-########################################
 # Fastfetch dotfiles
 ########################################
 log "Installing fastfetch config + .profile hook"
@@ -143,16 +131,40 @@ fi
 # Summary
 ########################################
 log "Done"
+needs_gitconfig=0
+if [[ ! -f "${HOME}/.gitconfig" ]] || ! git config --global --get user.email >/dev/null 2>&1; then
+    needs_gitconfig=1
+fi
+
 cat <<EOF
 
+============================================================
 User bootstrap complete.
+============================================================
 
-  gitconfig: ${GITCONFIG}
+Status
+------
   fastfetch: ${FF_DIR}/config.jsonc (+ .profile SSH hook)
   uv:        $([[ "${SKIP_UV}" == "1" ]] && echo "(skipped)" || echo "${HOME}/.local/bin/uv")
   vcpkg:     $([[ "${SKIP_VCPKG}" == "1" ]] && echo "(skipped)" || echo "${VCPKG_ROOT}")
+  gitconfig: $([[ "${needs_gitconfig}" == "1" ]] && echo "not set (see below)" || echo "$(git config --global user.name) <$(git config --global user.email)>")
 
-Next:
+EOF
+
+if [[ "${needs_gitconfig}" == "1" ]]; then
+    cat <<'EOF'
+Next steps (run these now)
+--------------------------
+  # Set your git identity (edit the values to yours)
+  git config --global user.name  "Your Name"
+  git config --global user.email "you@example.com"
+
+EOF
+fi
+
+cat <<EOF
+Then
+----
   - Open a new shell (or 'source ~/.bashrc') to pick up VCPKG_ROOT + uv on PATH.
   - Project builds can now use:
       -DCMAKE_TOOLCHAIN_FILE=\$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake

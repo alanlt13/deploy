@@ -97,7 +97,10 @@ per-account config + `.profile` login hook live in `user.sh`.
 Disables noisy MOTD entries: `00-header`, `10-help-text`, `50-motd-news`.
 
 ### Mail alias
-Installs `/etc/aliases` (root → your email) and runs `newaliases`.
+Installs `/etc/aliases` with a commented-out placeholder `root:` line
+(so no personal email lives in the repo). The final summary includes a
+reminder to uncomment/edit the line and run `sudo newaliases`. Idempotent
+— re-runs won't clobber a file you've edited (detected via marker comment).
 
 ### Tailscale
 Installs via the official `tailscale.com/install.sh` and enables the
@@ -131,10 +134,6 @@ Run as the non-root user after `install.sh`. No sudo — only touches `$HOME`.
 
 ### Guards
 Asserts Ubuntu and that the caller is not root.
-
-### Git config
-Installs `~/.gitconfig` from `dotfiles/gitconfig` (name + email), only if
-the file doesn't already exist — re-runs won't clobber per-account tweaks.
 
 ### Fastfetch dotfiles
 Drops `~/.config/fastfetch/config.jsonc` and appends an idempotent block
@@ -170,12 +169,19 @@ The script is idempotent; re-running should be a no-op.
 
 ## After install
 
-1. From your laptop: `ssh $USERNAME@<host>` — confirm key-auth works.
-2. Drop `/etc/msmtprc` on the box — template at
+The `install.sh` summary prints concrete next-step commands specific to
+what still needs doing on *this* box (set a password for the user, run
+`tailscale up` if no authkey, edit `/etc/aliases`, drop `/etc/msmtprc`,
+reboot if needed, run `user.sh`). Follow those first. The canonical
+sequence is:
+
+1. Run the commands printed by the `install.sh` summary (as root, on the box).
+2. From your laptop: `ssh $USERNAME@<host-or-tailscale-name>` — confirm key-auth works.
+3. Run `user.sh` (stage 2) as the non-root user to finish account-level setup.
+   Its summary will then prompt you for `git config --global user.{name,email}`.
+4. Drop `/etc/msmtprc` — template at
    [`secrets.example/msmtprc.example`](secrets.example/msmtprc.example).
    Full steps in [`secrets.example/README.md`](secrets.example/README.md).
-3. `git config --global user.{name,email}` as needed.
-4. Run `user.sh` (stage 2) as the non-root user to finish account-level setup.
 5. Optional: disable root SSH login (see secrets README).
 
 ## Lockout recovery
