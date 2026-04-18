@@ -17,16 +17,13 @@ echo "bootstrap test from $(hostname)" | mail -s "msmtp test" root
 
 You should get an email at the address set in `/etc/aliases` (root → …).
 
-## 2. Git identity
+## 2. (Optional) disable root SSH login
 
-```
-git config --global user.name  "Your Name"
-git config --global user.email "you@example.com"
-```
-
-## 3. (Optional) disable root SSH login
-
-Only do this *after* you have confirmed `ssh <user>@<host>` works from your laptop.
+Only do this *after* you have confirmed `ssh <user>@<host>` works from your
+laptop. Before running this, also confirm `tailscale status` shows the node
+joined and `ssh alan@<tailnet-name>` works — Tailscale SSH is your escape
+hatch if the key ever goes bad. See [`../README.md`](../README.md) →
+"Lockout recovery" for the full map.
 
 ```
 sudo tee /etc/ssh/sshd_config.d/50-no-root.conf <<EOF
