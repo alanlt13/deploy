@@ -1,0 +1,16 @@
+# /etc/msmtprc — install as root:mail, mode 0600
+# After editing, verify with:  echo test | mail -s "msmtp test" root
+
+defaults
+auth           on
+tls            on
+tls_starttls   on
+tls_trust_file /etc/ssl/certs/ca-certificates.crt
+logfile        /var/log/msmtp.log
+
+account        default
+host           <SMTP_HOST>          # e.g. smtp.gmail.com, smtp.fastmail.com, in.mailjet.com
+port           587
+from           <FROM_ADDRESS>       # the From: header on outgoing mail
+user           <SMTP_USER>
+password       <SMTP_PASSWORD>
