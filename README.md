@@ -184,6 +184,27 @@ sequence is:
    Full steps in [`secrets.example/README.md`](secrets.example/README.md).
 5. Optional: disable root SSH login (see secrets README).
 
+## Projects that build on the box
+
+`user.sh` installs vcpkg but deliberately doesn't install any custom triplets —
+those are per-project decisions and live with the project.
+
+Projects that want aggressive optimization (build-and-run-on-the-same-box
+workloads, e.g. the `microstruct` trading system) typically ship a thin
+wrapper script plus a custom triplet. The pattern looks like:
+
+- A triplet file at `$VCPKG_ROOT/triplets/community/<triplet-name>.cmake`
+  setting `-O3 -march=native -flto=auto` on `VCPKG_{C,CXX,LINKER}_FLAGS` so
+  vcpkg compiles every dep with the same flags as your code.
+- A wrapper under `<project>/scripts/build-prod.sh` (and often
+  `build-pgo.sh`) that runs the exact cmake incantation, supports
+  incremental builds, and handles stale-state wipes.
+
+`microstruct/README.md` ("Optimized vcpkg triplet" and "Build (production)")
+is the reference implementation. New projects on the box should either
+reuse the `x64-linux-native` triplet microstruct defines, or follow the
+same pattern with their own name.
+
 ## Lockout recovery
 
 "My MacBook (with my only SSH private key) just died. How do I get back in?"

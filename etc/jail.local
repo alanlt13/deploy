@@ -1,0 +1,20 @@
+# /etc/fail2ban/jail.local — managed by deploy/install.sh
+# Overrides on top of /etc/fail2ban/jail.conf. Keep this minimal; anything
+# not set here inherits the distro defaults.
+
+[DEFAULT]
+# Ubuntu ships rsyslog-less by default on cloud images — read from the
+# systemd journal instead of /var/log/auth.log.
+backend = systemd
+
+# Ban tuning. 1h ban after 5 failures within 10 min.
+bantime  = 1h
+findtime = 10m
+maxretry = 5
+
+# Never ban these. Tailscale CGNAT range (100.64.0.0/10) keeps us reachable
+# over the tailnet even if we fat-finger auth from a tailnet peer.
+ignoreip = 127.0.0.1/8 ::1 100.64.0.0/10
+
+[sshd]
+enabled = true

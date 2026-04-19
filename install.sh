@@ -121,8 +121,9 @@ apt-get install -y \
     autoconf automake libtool \
     git zip unzip tar \
     ncdu htop btop tmux \
-    ripgrep fd-find bat eza zoxide \
+    ripgrep fd-find bat eza zoxide fzf \
     unattended-upgrades \
+    fail2ban \
     mailutils msmtp msmtp-mta \
     ca-certificates curl gnupg software-properties-common
 
@@ -237,6 +238,16 @@ chmod 644 /etc/apt/apt.conf.d/20auto-upgrades
 systemctl enable --now unattended-upgrades.service >/dev/null
 
 ########################################
+# fail2ban
+########################################
+log "Configuring fail2ban"
+fetch_asset "etc/jail.local" /etc/fail2ban/jail.local
+chmod 644 /etc/fail2ban/jail.local
+systemctl enable --now fail2ban.service >/dev/null
+# Pick up config changes on re-runs (enable --now is a no-op if already running).
+systemctl reload fail2ban.service 2>/dev/null || systemctl restart fail2ban.service
+
+########################################
 # Summary
 ########################################
 # Always-recommended next steps (not tied to a specific condition above).
@@ -268,6 +279,7 @@ Status
   ssh password auth: $([[ -f /etc/ssh/sshd_config.d/50-hardening.conf ]] && echo disabled || echo "(image default)")
   mail alias:        $(awk -F: '/^root:/{print $2}' /etc/aliases | xargs || echo "(none)")
   unattended-upgr:   $(systemctl is-active unattended-upgrades.service)
+  fail2ban:          $(systemctl is-active fail2ban.service) ($(fail2ban-client status 2>/dev/null | awk -F'\t' '/Jail list/{print $2}'))
 
 EOF
 
