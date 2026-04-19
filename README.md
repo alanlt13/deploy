@@ -170,9 +170,10 @@ The script is idempotent; re-running should be a no-op.
 ## After install
 
 The `install.sh` summary prints concrete next-step commands specific to
-what still needs doing on *this* box (set a password for the user, run
-`tailscale up` if no authkey, edit `/etc/aliases`, drop `/etc/msmtprc`,
-reboot if needed, run `user.sh`). Follow those first. The canonical
+what still needs doing on *this* box (set hostname, set timezone, set a
+password for the user, run `tailscale up` if no authkey, edit
+`/etc/aliases`, drop `/etc/msmtprc`, reboot if needed, run `user.sh`).
+Follow those first. The canonical
 sequence is:
 
 1. Run the commands printed by the `install.sh` summary (as root, on the box).

@@ -251,6 +251,8 @@ systemctl reload fail2ban.service 2>/dev/null || systemctl restart fail2ban.serv
 # Summary
 ########################################
 # Always-recommended next steps (not tied to a specific condition above).
+add_next "Set the hostname (shows up in prompts, logs, mail)|sudo hostnamectl set-hostname <newname>"
+add_next "Set the timezone to America/New_York (EST/EDT)|sudo timedatectl set-timezone America/New_York"
 add_next "Set a password for ${USERNAME} (for provider console / emergency fallback; key auth still preferred)|sudo passwd ${USERNAME}"
 add_next "Run the user-level bootstrap as ${USERNAME} (after you ssh in)|bash <(curl -fsSL ${REPO_RAW_BASE}/user.sh)"
 if [[ -f /var/run/reboot-required ]]; then
