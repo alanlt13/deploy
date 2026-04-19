@@ -10,6 +10,8 @@
 #   PASSWORDLESS_SUDO   "1" to grant NOPASSWD sudo        (default: 1)
 #   TAILSCALE_AUTHKEY   tskey-auth-... from admin console (default: unset)
 #   HARDEN_SSH          "1" to disable password SSH       (default: 1)
+#   VSWITCH_VLAN_ID     Hetzner vSwitch VLAN id (e.g. 4000, default: unset)
+#   VSWITCH_CIDR        this host's IP on the vSwitch, e.g. 10.10.10.2/24 (default: unset)
 
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -20,6 +22,8 @@ SSH_PUBKEY="${SSH_PUBKEY:-}"
 PASSWORDLESS_SUDO="${PASSWORDLESS_SUDO:-1}"
 TAILSCALE_AUTHKEY="${TAILSCALE_AUTHKEY:-}"
 HARDEN_SSH="${HARDEN_SSH:-1}"
+VSWITCH_VLAN_ID="${VSWITCH_VLAN_ID:-}"
+VSWITCH_CIDR="${VSWITCH_CIDR:-}"
 
 REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/alanlt13/deploy/main}"
 
@@ -118,7 +122,7 @@ apt-get update
 apt-get -y dist-upgrade
 apt-get install -y \
     build-essential cmake ninja-build gdb pkg-config \
-    autoconf automake libtool \
+    autoconf automake libtool flex bison \
     git zip unzip tar \
     ncdu htop btop tmux \
     ripgrep fd-find bat eza zoxide fzf \
@@ -165,12 +169,68 @@ fi
 
 # The template ships with the root: line commented out. Flag it until edited.
 if grep -qE '^\s*#\s*root:' /etc/aliases; then
-    add_next "Set where system mail goes (uncomment + edit the root: line, then newaliases)|sudo \$EDITOR /etc/aliases && sudo newaliases"
+    add_next "Set where system mail goes (uncomment + edit the root: line, then newaliases)|sudo vi /etc/aliases && sudo newaliases"
 fi
 
 if [[ ! -f /etc/msmtprc ]]; then
-    add_next "Configure outbound mail|sudo \$EDITOR /etc/msmtprc   # template: secrets.example/msmtprc.example"
+    add_next "Configure outbound mail|sudo vi /etc/msmtprc   # template: secrets.example/msmtprc.example"
 fi
+
+########################################
+# Hetzner vSwitch (optional)
+########################################
+# Both halves of a vSwitch setup are needed or traffic silently drops:
+#   1. This block: bring up a tagged VLAN subinterface on the primary NIC
+#      with MTU 1400, via a netplan drop-in so it survives reboots.
+#   2. Hetzner Robot panel (manual): attach the server to the vSwitch AND
+#      add a firewall rule allowing the internal subnet (src IP = subnet,
+#      all other fields blank, action = accept). The server firewall is
+#      also applied to vSwitch packets — without that rule, only UDP to
+#      port 41641 (Tailscale) passes, which looks like "partly working".
+if [[ -n "${VSWITCH_VLAN_ID}" && -n "${VSWITCH_CIDR}" ]]; then
+    log "Configuring Hetzner vSwitch (VLAN ${VSWITCH_VLAN_ID}, ${VSWITCH_CIDR})"
+    VSWITCH_NIC="$(ip -4 route show default | awk 'NR==1{print $5}')"
+    [[ -n "${VSWITCH_NIC}" ]] || die "could not auto-detect primary NIC (no default route)"
+    echo "  primary NIC: ${VSWITCH_NIC}"
+
+    VSWITCH_FILE="/etc/netplan/02-vswitch.yaml"
+    cat > "${VSWITCH_FILE}" <<EOF
+### deploy/install.sh — Hetzner vSwitch
+network:
+  version: 2
+  renderer: networkd
+  vlans:
+    vlan${VSWITCH_VLAN_ID}:
+      id: ${VSWITCH_VLAN_ID}
+      link: ${VSWITCH_NIC}
+      mtu: 1400
+      addresses:
+        - ${VSWITCH_CIDR}
+EOF
+    chmod 0600 "${VSWITCH_FILE}"
+    if netplan generate >/dev/null 2>&1 && netplan apply >/dev/null 2>&1; then
+        echo "  vlan${VSWITCH_VLAN_ID} up on ${VSWITCH_NIC} @ ${VSWITCH_CIDR} (MTU 1400)"
+    else
+        warn "netplan generate/apply failed — removing ${VSWITCH_FILE}"
+        rm -f "${VSWITCH_FILE}"
+        netplan apply >/dev/null 2>&1 || true
+    fi
+    add_next "Hetzner Robot: attach this server to the vSwitch AND add a firewall 'accept' rule for the vSwitch subnet (src IP=subnet, everything else blank). Without that rule only UDP/41641 passes|# Robot panel → Server → vSwitches (attach), then → Firewall (add accept rule)"
+else
+    add_next "(optional) Wire this box into a Hetzner vSwitch (persistent via netplan)|VSWITCH_VLAN_ID=4000 VSWITCH_CIDR=10.10.10.N/24 bash install.sh   # + Robot: attach + firewall allow for subnet"
+fi
+
+########################################
+# Timezone
+########################################
+log "Setting timezone to America/New_York"
+timedatectl set-timezone America/New_York
+echo "  $(timedatectl show -p Timezone --value) ($(date +%Z))"
+
+########################################
+# Hostname reminder (before Tailscale so the tailnet name matches)
+########################################
+add_next "Set the hostname BEFORE joining the tailnet (shows up in prompts, logs, mail, tailnet)|sudo hostnamectl set-hostname <newname>"
 
 ########################################
 # Tailscale
@@ -251,9 +311,9 @@ systemctl reload fail2ban.service 2>/dev/null || systemctl restart fail2ban.serv
 # Summary
 ########################################
 # Always-recommended next steps (not tied to a specific condition above).
-add_next "Set the hostname (shows up in prompts, logs, mail)|sudo hostnamectl set-hostname <newname>"
-add_next "Set the timezone to America/New_York (EST/EDT)|sudo timedatectl set-timezone America/New_York"
 add_next "Set a password for ${USERNAME} (for provider console / emergency fallback; key auth still preferred)|sudo passwd ${USERNAME}"
+add_next "Change the root password (cloud images often ship with a known/blank one)|sudo passwd root"
+add_next "Disable root SSH login (only AFTER confirming ssh as ${USERNAME} works)|echo 'PermitRootLogin no' | sudo tee /etc/ssh/sshd_config.d/50-no-root.conf && sudo sshd -t && sudo systemctl reload ssh"
 add_next "Run the user-level bootstrap as ${USERNAME} (after you ssh in)|bash <(curl -fsSL ${REPO_RAW_BASE}/user.sh)"
 if [[ -f /var/run/reboot-required ]]; then
     add_next "Reboot (kernel or libc update from dist-upgrade requires it)|sudo reboot"
