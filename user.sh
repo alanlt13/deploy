@@ -9,6 +9,7 @@
 #   VCPKG_ROOT          where to clone vcpkg      (default: $XDG_DATA_HOME/vcpkg, i.e. ~/.local/share/vcpkg)
 #   SKIP_VCPKG          "1" to skip vcpkg         (default: 0)
 #   SKIP_UV             "1" to skip uv            (default: 0)
+#   SKIP_CLAUDE         "1" to skip Claude Code   (default: 0)
 
 set -euo pipefail
 
@@ -16,6 +17,7 @@ XDG_DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 VCPKG_ROOT="${VCPKG_ROOT:-$XDG_DATA_HOME/vcpkg}"
 SKIP_VCPKG="${SKIP_VCPKG:-0}"
 SKIP_UV="${SKIP_UV:-0}"
+SKIP_CLAUDE="${SKIP_CLAUDE:-0}"
 
 REPO_RAW_BASE="${REPO_RAW_BASE:-https://raw.githubusercontent.com/alanlt13/deploy/main}"
 
@@ -88,6 +90,20 @@ else
 fi
 
 ########################################
+# Claude Code
+########################################
+if [[ "${SKIP_CLAUDE}" != "1" ]]; then
+    if [[ -x "${HOME}/.local/bin/claude" ]] || command -v claude >/dev/null 2>&1; then
+        echo "claude already installed ($(${HOME}/.local/bin/claude --version 2>/dev/null || claude --version 2>/dev/null || echo unknown))"
+    else
+        log "Installing Claude Code"
+        curl -fsSL https://claude.ai/install.sh | bash
+    fi
+else
+    echo "claude skipped (SKIP_CLAUDE=${SKIP_CLAUDE})"
+fi
+
+########################################
 # vcpkg
 ########################################
 if [[ "${SKIP_VCPKG}" != "1" ]]; then
@@ -146,6 +162,7 @@ Status
 ------
   fastfetch: ${FF_DIR}/config.jsonc (+ .profile SSH hook)
   uv:        $([[ "${SKIP_UV}" == "1" ]] && echo "(skipped)" || echo "${HOME}/.local/bin/uv")
+  claude:    $([[ "${SKIP_CLAUDE}" == "1" ]] && echo "(skipped)" || echo "${HOME}/.local/bin/claude (run 'claude' to authenticate)")
   vcpkg:     $([[ "${SKIP_VCPKG}" == "1" ]] && echo "(skipped)" || echo "${VCPKG_ROOT}")
   gitconfig: $([[ "${needs_gitconfig}" == "1" ]] && echo "not set (see below)" || echo "$(git config --global user.name) <$(git config --global user.email)>")
 
