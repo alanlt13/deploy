@@ -143,6 +143,22 @@ fi
 apt-get install -y fastfetch
 
 ########################################
+# glow (markdown renderer) via Charm apt repo
+########################################
+log "Installing glow"
+if [[ ! -f /etc/apt/keyrings/charm.gpg ]]; then
+    install -d -m 755 /etc/apt/keyrings
+    curl -fsSL https://repo.charm.sh/apt/gpg.key | gpg --dearmor -o /etc/apt/keyrings/charm.gpg
+    chmod 644 /etc/apt/keyrings/charm.gpg
+fi
+if [[ ! -f /etc/apt/sources.list.d/charm.list ]]; then
+    echo "deb [signed-by=/etc/apt/keyrings/charm.gpg] https://repo.charm.sh/apt/ * *" \
+        > /etc/apt/sources.list.d/charm.list
+    apt-get update
+fi
+apt-get install -y glow
+
+########################################
 # MOTD trim
 ########################################
 log "Trimming /etc/update-motd.d"
